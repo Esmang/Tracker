@@ -1,0 +1,68 @@
+const STATUS={
+ "Niet gestart":{bg:"#e7edf3",fg:"#455b70"},
+ "In behandeling":{bg:"#d7e8ff",fg:"#0759b0"},
+ "Wacht op input intern":{bg:"#fff0b8",fg:"#8a5700"},
+ "Wacht op input extern":{bg:"#eee0ff",fg:"#6e32a1"},
+ "Geblokkeerd":{bg:"#ffd9d6",fg:"#b42318"},
+ "Voltooid":{bg:"#d8f7e6",fg:"#087747"}
+};
+const DEFS=[
+ ["Business Need","💡","#2878e8","Business Case Owner","Businessbehoefte, doel, scope en verwachte waarde vastleggen."],
+ ["Software Circle","🔄","#08a7b5","Software Circle","Controleren op bestaande oplossingen, hergebruik en positionering binnen het softwareportfolio."],
+ ["Domain Architect","🏗️","#7447df","Domain Architect","Architectuurfit, integraties, dataflows en technische randvoorwaarden beoordelen."],
+ ["Security Review","🔐","#f2a20b","Security Team","Beveiligingsrisico's, maatregelen en benodigde securitydocumentatie beoordelen."],
+ ["Privacy Review","🛡️","#d84f91","Privacy Team","Verwerking van persoonsgegevens, privacyrisico's en benodigde privacydocumentatie beoordelen."],
+ ["Procurement","🤝","#079b86","Procurement","Leveranciersselectie, commerciële afspraken en inkoopvoorwaarden coördineren."],
+ ["Finance Approval","💰","#0a9b59","Finance","Budget, cost center en financiële goedkeuring vastleggen."],
+ ["Legal Review","⚖️","#ef352c","Legal","Contract, DPA, aansprakelijkheid, intellectuele eigendom en overige juridische voorwaarden beoordelen."],
+ ["Go Live","🚀","#604eea","Projecteigenaar","Afronding van goedkeuringen, implementatie en formele ingebruikname vastleggen."]
+];
+const PROJECT_FIELDS=[
+ ["projectName","Projectnaam","text"],["supplier","SaaS-leverancier","text"],["product","Productnaam","text"],["projectOwner","Projecteigenaar","text"],["startDate","Startdatum","date"],["goLiveDate","Gewenste go-live-datum","date"],["lastModified","Laatst gewijzigd","text"]
+];
+function fresh(){const now=new Date().toISOString();return {project:{projectName:"Nieuw SaaS-project",supplier:"",product:"",projectOwner:"",startDate:"",goLiveDate:"",lastModified:new Date().toLocaleString("nl-NL")},selected:0,current:0,phases:DEFS.map((d,i)=>({name:d[0],icon:d[1],color:d[2],status:i===0?"In behandeling":"Niet gestart",owner:d[3],action:"",blocker:"",nextStep:"",description:d[4],targetDate:"",notes:"",steps:[],modified:new Date().toLocaleString("nl-NL"),log:[{at:new Date().toLocaleString("nl-NL"),text:"Fase aangemaakt"}]})),updatedAt:now};}
+let data=load();
+function load(){try{const x=JSON.parse(localStorage.getItem("saasTrackerV2"));if(x&&Array.isArray(x.phases)&&x.phases.length===9)return x;}catch(e){}return fresh();}
+let saveTimer;
+function save(msg){
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(()=>{
+    data.updatedAt=new Date().toISOString();
+    data.project.lastModified=new Date().toLocaleString("nl-NL");
+    localStorage.setItem("saasTrackerV2",JSON.stringify(data));
+    const modifiedField=document.querySelector('[data-project="lastModified"]');
+    if(modifiedField) modifiedField.value=data.project.lastModified;
+    if(msg) addLog(msg,false);
+  },180);
+}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function addLog(text,rerender=true){const p=data.phases[data.selected];p.modified=new Date().toLocaleString("nl-NL");p.log.unshift({at:p.modified,text});p.log=p.log.slice(0,100);localStorage.setItem("saasTrackerV2",JSON.stringify(data));if(rerender)renderDetail();}
+function renderProject(){const root=document.getElementById("projectFields");root.innerHTML=PROJECT_FIELDS.map(([key,label,type])=>`<div class="field"><label>${label}</label><input data-project="${key}" type="${type}" value="${esc(data.project[key])}" ${key==="lastModified"?"readonly":""}></div>`).join("");root.querySelectorAll("[data-project]").forEach(el=>el.oninput=()=>{data.project[el.dataset.project]=el.value;save();});}
+function renderProgress(){const done=data.phases.filter(p=>p.status==="Voltooid").length,pct=Math.round(done/data.phases.length*100),cur=data.phases[data.current];document.getElementById("progressText").textContent=`${pct}% · ${done} van ${data.phases.length} voltooid`;document.getElementById("progressFill").style.width=pct+"%";document.getElementById("progressLabel").textContent=`${cur.icon} ${cur.name} · fase ${data.current+1} van ${data.phases.length}`;renderPhases();}
+function renderPhases(){const root=document.getElementById("phases");root.innerHTML=data.phases.map((p,i)=>{const st=STATUS[p.status]||STATUS["Niet gestart"];return `<button class="phase ${i===data.selected?"selected":""} ${i===data.current?"current":""}" data-i="${i}" title="Bekijk ${esc(p.name)}"><span class="bubble" style="background:${p.color}">${p.icon}</span><span class="phase-name">${esc(p.name)}</span><span class="phase-no">Fase ${i+1}</span><span class="status-pill" style="background:${st.bg};color:${st.fg}">${p.status==="Voltooid"?"✓ ":"○ "}${esc(p.status)}</span></button>`}).join("");root.querySelectorAll(".phase").forEach(b=>b.onclick=()=>{data.selected=+b.dataset.i;localStorage.setItem("saasTrackerV2",JSON.stringify(data));renderPhases();renderDetail();});}
+function statusOptions(sel){return Object.keys(STATUS).map(x=>`<option ${x===sel?"selected":""}>${x}</option>`).join("");}
+function renderDetail(){const p=data.phases[data.selected],i=data.selected,root=document.getElementById("detail");root.innerHTML=`
+ <div class="detail-title"><div><h2>${p.icon} Fase ${i+1}: ${esc(p.name)}</h2><div class="meta">Geselecteerde fase · laatst gewijzigd ${esc(p.modified)}</div></div><button class="btn primary" id="currentBtn" ${i===data.current?"disabled":""}>${i===data.current?"Dit is de huidige fase":"Maak huidige fase"}</button></div>
+ <div class="notice"><strong>Geselecteerd</strong> bepaalt welke details zichtbaar zijn. Alleen de knop <strong>Maak huidige fase</strong> wijzigt de officiële projectfase.</div>
+ <div class="detail-grid">
+  <div class="field"><label>Status</label><select data-key="status">${statusOptions(p.status)}</select></div>
+  <div class="field"><label>Eigenaar</label><input data-key="owner" value="${esc(p.owner)}"></div>
+  <div class="field"><label>Openstaande actie</label><input data-key="action" value="${esc(p.action)}"></div>
+  <div class="field"><label>Blocker</label><input data-key="blocker" value="${esc(p.blocker)}"></div>
+  <div class="field"><label>Volgende stap</label><input data-key="nextStep" value="${esc(p.nextStep)}"></div>
+  <div class="field"><label>Streefdatum</label><input type="date" data-key="targetDate" value="${esc(p.targetDate)}"></div>
+  <div class="field span2"><label>Beschrijving</label><textarea data-key="description">${esc(p.description)}</textarea></div>
+  <div class="field span2"><label>Opmerkingen</label><textarea data-key="notes" placeholder="Eventuele opmerkingen voor deze fase">${esc(p.notes)}</textarea></div>
+ </div>
+ <details class="accordion" open><summary>Onderliggende stappen (${p.steps.filter(s=>!s.done).length} open)</summary><div class="accordion-body"><div id="steps"></div><div class="new-step"><input id="stepText" placeholder="Nieuwe onderliggende stap"><button class="btn" id="addStep">Toevoegen</button></div></div></details>
+ <details class="accordion"><summary>Activiteitenlog (${p.log.length})</summary><div class="accordion-body log">${p.log.length?p.log.map(x=>`<div class="log-entry"><strong>${esc(x.at)}</strong><span>${esc(x.text)}</span></div>`).join(""):'<div class="empty">Nog geen activiteiten.</div>'}</div></details>`;
+ root.querySelectorAll("[data-key]").forEach(el=>{const event=el.tagName==="SELECT"?"change":"input";el.addEventListener(event,()=>{p[el.dataset.key]=el.value;p.modified=new Date().toLocaleString("nl-NL");save();if(el.dataset.key==="status"){addLog(`Status gewijzigd naar ${el.value}`,false);renderProgress();renderDetail();}})});
+ document.getElementById("currentBtn").onclick=()=>{if(i===data.current)return;data.current=i;addLog("Fase ingesteld als huidige projectfase",false);save();renderProgress();renderDetail();};
+ document.getElementById("addStep").onclick=addStep;document.getElementById("stepText").onkeydown=e=>{if(e.key==="Enter")addStep();};renderSteps();}
+function addStep(){const input=document.getElementById("stepText"),text=input.value.trim();if(!text)return;data.phases[data.selected].steps.push({id:Date.now(),text,done:false});addLog(`Onderliggende stap toegevoegd: ${text}`,false);save();renderDetail();}
+function renderSteps(){const p=data.phases[data.selected],root=document.getElementById("steps");root.innerHTML=p.steps.length?p.steps.map((s,n)=>`<div class="step"><input type="checkbox" data-check="${n}" ${s.done?"checked":""}><input type="text" data-step="${n}" value="${esc(s.text)}"><button class="icon-btn" data-del="${n}" title="Verwijderen">×</button></div>`).join(""):'<div class="empty">Nog geen onderliggende stappen.</div>';root.querySelectorAll("[data-check]").forEach(x=>x.onchange=()=>{p.steps[+x.dataset.check].done=x.checked;addLog(`Stap ${x.checked?"voltooid":"heropend"}: ${p.steps[+x.dataset.check].text}`,false);save();renderDetail();});root.querySelectorAll("[data-step]").forEach(x=>x.onchange=()=>{p.steps[+x.dataset.step].text=x.value;addLog("Tekst van onderliggende stap gewijzigd",false);save();});root.querySelectorAll("[data-del]").forEach(x=>x.onclick=()=>{const [s]=p.steps.splice(+x.dataset.del,1);addLog(`Onderliggende stap verwijderd: ${s.text}`,false);save();renderDetail();});}
+document.getElementById("exportBtn").onclick=()=>{const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=(data.project.projectName||"saas-procurement-tracker").replace(/[^a-z0-9_-]+/gi,"-").toLowerCase()+".json";a.click();URL.revokeObjectURL(a.href);};
+document.getElementById("importBtn").onclick=()=>document.getElementById("fileInput").click();
+document.getElementById("fileInput").onchange=async e=>{try{const x=JSON.parse(await e.target.files[0].text());if(!x.project||!Array.isArray(x.phases)||x.phases.length!==9)throw Error();data=x;localStorage.setItem("saasTrackerV2",JSON.stringify(data));renderAll();}catch(err){alert("Dit is geen geldig SaaS Procurement Tracker JSON-bestand.");}e.target.value="";};
+document.getElementById("resetBtn").onclick=()=>{if(confirm("Een nieuw project starten? De lokaal opgeslagen gegevens worden vervangen.")){data=fresh();localStorage.setItem("saasTrackerV2",JSON.stringify(data));renderAll();}};
+function renderAll(){renderProject();renderProgress();renderDetail();}renderAll();

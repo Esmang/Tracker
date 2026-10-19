@@ -1,0 +1,1 @@
+# Geen externe packages nodig; Python 3.10+ volstaat.
